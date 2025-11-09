@@ -27,7 +27,12 @@ class ChatRequest(BaseModel):
     """Chat request model."""
     message: str = Field(..., description="User message", min_length=1)
     thread_id: str | None = Field(None, description="Thread/conversation ID")
-    agent: str = Field("lean_hybrid", description="Agent to use")
+    user_id: str | None = Field(None, description="User ID for personalization")
+    corpus_id: str | None = Field(None, description="Corpus ID to search in")
+    agent: str | None = Field(None, description="Specific agent to use (auto-route if None)")
+    enable_query_refinement: bool = Field(True, description="Enable query refinement")
+    enable_critique: bool = Field(True, description="Enable answer critique")
+    multi_agent: bool = Field(False, description="Use multiple agents and merge results")
 
 
 class Citation(BaseModel):
@@ -46,12 +51,13 @@ class ChatResponse(BaseModel):
     thread_id: str
     agent: str
     execution_time_ms: float
+    metadata: dict = Field(default_factory=dict)
 
 
 @router.post("/chat")
 async def chat(request: ChatRequest, req: Request) -> ChatResponse:
     """
-    Non-streaming chat endpoint.
+    Non-streaming chat endpoint with Phase 2 orchestration.
 
     Args:
         request: Chat request
@@ -67,21 +73,40 @@ async def chat(request: ChatRequest, req: Request) -> ChatResponse:
         "Chat request received",
         thread_id=thread_id,
         message_preview=request.message[:100],
-        agent=request.agent
+        agent=request.agent or "auto-route",
+        user_id=request.user_id
     )
 
     try:
-        # Get agent
-        if request.agent == "lean_hybrid":
-            agent = req.app.state.lean_hybrid_agent
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unknown agent: {request.agent}"
+        # Use main graph for Phase 2 orchestration
+        if request.agent is None:
+            # Auto-route using main graph
+            main_graph = req.app.state.main_graph
+
+            result = await main_graph.run(
+                query=request.message,
+                user_id=request.user_id,
+                corpus_id=request.corpus_id,
+                thread_id=thread_id,
+                enable_query_refinement=request.enable_query_refinement,
+                enable_critique=request.enable_critique,
+                multi_agent=request.multi_agent
             )
 
-        # Run agent
-        result = await agent.run(query=request.message)
+            selected_agent = result.get("selected_agent", "unknown")
+        else:
+            # Use specific agent (bypass router)
+            agent_registry = req.app.state.agent_registry
+            agent = agent_registry.get_or_create_agent(
+                request.agent,
+                corpus_id=request.corpus_id
+            )
+
+            result = await agent.run(
+                query=request.message,
+                corpus_id=request.corpus_id
+            )
+            selected_agent = request.agent
 
         execution_time_ms = (time.time() - start_time) * 1000
 
@@ -93,16 +118,18 @@ async def chat(request: ChatRequest, req: Request) -> ChatResponse:
             ],
             confidence=result.get("confidence", 0.0),
             thread_id=thread_id,
-            agent=request.agent,
-            execution_time_ms=round(execution_time_ms, 2)
+            agent=selected_agent,
+            execution_time_ms=round(execution_time_ms, 2),
+            metadata=result.get("metadata", {})
         )
 
         logger.info(
             "Chat request completed",
             thread_id=thread_id,
-            agent=request.agent,
+            agent=selected_agent,
             execution_time_ms=round(execution_time_ms, 2),
-            citations=len(response.citations)
+            citations=len(response.citations),
+            confidence=response.confidence
         )
 
         return response
@@ -237,19 +264,29 @@ async def chat_stream(request: ChatRequest, req: Request):
 
 
 @router.get("/threads/{thread_id}")
-async def get_thread(thread_id: str):
+async def get_thread(thread_id: str, req: Request):
     """
-    Get conversation thread (placeholder for Phase 2).
+    Get conversation thread summary from memory system.
 
     Args:
         thread_id: Thread ID
+        req: FastAPI request object
 
     Returns:
-        Thread information
+        Thread information with summary
     """
-    # TODO: Implement in Phase 2 with memory system
-    return {
-        "thread_id": thread_id,
-        "messages": [],
-        "note": "Memory system not yet implemented (Phase 2)"
-    }
+    try:
+        memory = req.app.state.memory
+
+        # Get conversation summary
+        summary = await memory.get_conversation_summary(thread_id)
+
+        return {
+            "thread_id": thread_id,
+            "summary": summary,
+            "has_summary": summary is not None
+        }
+
+    except Exception as e:
+        logger.error("Failed to get thread", thread_id=thread_id, error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))

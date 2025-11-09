@@ -269,5 +269,125 @@ def info(corpus_name: str):
     asyncio.run(run_info())
 
 
+@app.command()
+def build_raptor(
+    corpus_name: str = typer.Argument(..., help="Corpus name to build RAPTOR for"),
+    force: bool = typer.Option(False, "--force", "-f", help="Force rebuild (delete existing summaries)"),
+    clusters: int = typer.Option(5, "--clusters", "-c", help="Number of clusters per level"),
+):
+    """
+    Build RAPTOR hierarchical summaries for a corpus.
+
+    Creates 3-level summary tree using K-means clustering and LLM summarization.
+    Required for using the RAPTOR agent.
+    """
+    console.print(f"\n[bold blue]RAPTOR Builder[/bold blue]\n")
+
+    async def run_build():
+        try:
+            from app.db.connection import get_db_session
+            from app.db.models import Corpus
+            from app.ingestion.raptor_builder import RAPTORBuilder
+            from sqlalchemy import select
+
+            # Initialize database
+            with console.status("[bold green]Initializing database...[/bold green]"):
+                await init_db()
+                db_ok = await check_db_connection()
+
+                if not db_ok:
+                    console.print("[red]Database connection failed![/red]")
+                    raise typer.Exit(1)
+
+                console.print("[green]✓[/green] Database connected\n")
+
+            # Get corpus
+            async with get_db_session() as session:
+                result = await session.execute(
+                    select(Corpus).where(Corpus.name == corpus_name)
+                )
+                corpus = result.scalar_one_or_none()
+
+                if not corpus:
+                    console.print(f"[red]Corpus not found: {corpus_name}[/red]")
+                    console.print("\nUse 'cli.py list-corpora' to see available corpora.")
+                    raise typer.Exit(1)
+
+                corpus_id = str(corpus.id)
+                console.print(f"[bold]Corpus:[/bold] {corpus_name}")
+                console.print(f"[bold]Corpus ID:[/bold] {corpus_id}")
+                console.print(f"[bold]Force rebuild:[/bold] {force}")
+                console.print(f"[bold]Clusters per level:[/bold] {clusters}\n")
+
+            # Build RAPTOR tree
+            console.print("[bold cyan]Building RAPTOR tree...[/bold cyan]\n")
+            console.print("This may take several minutes for large corpora.\n")
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console
+            ) as progress:
+                task = progress.add_task("Building RAPTOR summaries...", total=None)
+
+                builder = RAPTORBuilder(n_clusters=clusters)
+                await builder.build_raptor_tree(
+                    corpus_id=corpus_id,
+                    force_rebuild=force
+                )
+
+                progress.stop()
+
+            # Get statistics
+            async with get_db_session() as session:
+                from app.db.models import RAPTORSummary
+                from sqlalchemy import func
+
+                result = await session.execute(
+                    select(
+                        RAPTORSummary.level,
+                        func.count(RAPTORSummary.id).label('count')
+                    )
+                    .where(RAPTORSummary.corpus_id == corpus_id)
+                    .group_by(RAPTORSummary.level)
+                    .order_by(RAPTORSummary.level)
+                )
+
+                level_counts = result.all()
+
+            # Display results
+            console.print("\n[bold green]RAPTOR tree completed![/bold green]\n")
+
+            table = Table(title="RAPTOR Summary Statistics")
+            table.add_column("Level", style="cyan")
+            table.add_column("Summaries", style="green")
+            table.add_column("Description", style="dim")
+
+            level_descriptions = {
+                1: "Fine-grained chunk clusters",
+                2: "Mid-level summary clusters",
+                3: "Top-level corpus overview"
+            }
+
+            for level, count in level_counts:
+                table.add_row(
+                    f"L{level}",
+                    str(count),
+                    level_descriptions.get(level, "")
+                )
+
+            console.print(table)
+            console.print("\n[green]✓[/green] RAPTOR agent is now available for this corpus!")
+            console.print()
+
+        except Exception as e:
+            console.print(f"\n[red]Error: {e}[/red]")
+            logger.error("RAPTOR build failed", error=str(e))
+            raise typer.Exit(1)
+
+    # Run async
+    asyncio.run(run_build())
+
+
 if __name__ == "__main__":
     app()

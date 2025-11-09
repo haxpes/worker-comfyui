@@ -9,7 +9,9 @@ from fastapi.responses import JSONResponse
 from app.config import settings
 from app.utils.logger import setup_logging, get_logger
 from app.db.connection import init_db, close_db, check_db_connection, check_extensions
-from app.agents.core.lean_hybrid import create_lean_hybrid_agent
+from app.core.memory import get_memory_manager
+from app.agents.registry import get_agent_registry
+from app.orchestration.main_graph import create_main_graph
 
 # Initialize logging first
 setup_logging()
@@ -45,12 +47,36 @@ async def lifespan(app: FastAPI):
             logger.error("Missing PostgreSQL extensions", extensions=missing)
             raise RuntimeError(f"Missing extensions: {missing}")
 
-        # Initialize agents
-        logger.info("Initializing agents...")
-        app.state.lean_hybrid_agent = create_lean_hybrid_agent()
+        # Initialize memory system (Phase 2)
+        logger.info("Initializing memory system...")
+        memory_manager = get_memory_manager()
+        await memory_manager.initialize()
+        app.state.memory = memory_manager
+
+        # Initialize agent registry (Phase 2)
+        logger.info("Initializing agent registry...")
+        agent_registry = get_agent_registry()
+
+        # Initialize all agents that don't require corpus
+        agent_instances = agent_registry.initialize_all_agents(lazy=True)
+        app.state.agent_registry = agent_registry
+        app.state.agent_instances = agent_instances
+
+        # Initialize main orchestration graph (Phase 2)
+        logger.info("Initializing main orchestration graph...")
+        main_graph = create_main_graph(
+            agent_registry=agent_instances,
+            enable_query_refinement=True,
+            enable_critique=True,
+            critique_threshold=0.7
+        )
+        app.state.main_graph = main_graph
 
         logger.info("=" * 80)
-        logger.info("AI-SME System Ready!")
+        logger.info("AI-SME System Ready! (Phase 2)")
+        logger.info(f"Agents available: {', '.join(agent_instances.keys())}")
+        logger.info(f"Memory system: enabled with checkpointing")
+        logger.info(f"Main graph: query refinement + routing + critique")
         logger.info(f"API Host: {settings.api_host}:{settings.api_port}")
         logger.info(f"CORS Origins: {settings.cors_origins}")
         logger.info("=" * 80)
@@ -67,6 +93,11 @@ async def lifespan(app: FastAPI):
     logger.info("=" * 80)
 
     try:
+        # Shutdown memory system
+        if hasattr(app.state, "memory"):
+            await app.state.memory.shutdown()
+            logger.info("Memory system shutdown")
+
         # Close database connections
         await close_db()
         logger.info("Database connections closed")
