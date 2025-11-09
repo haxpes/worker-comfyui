@@ -30,6 +30,7 @@ openai==1.12.0
 rank-bm25==0.2.2
 sentence-transformers==2.3.1
 faiss-cpu==1.7.4
+scikit-learn==1.3.2  # For RAPTOR clustering
 
 # spaCy for NER
 spacy==3.7.2
