@@ -1,0 +1,60 @@
+# FastAPI and Web Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+pydantic-settings==2.1.0
+python-multipart==0.0.6
+
+# Database
+psycopg[binary,pool]==3.1.16
+sqlalchemy==2.0.25
+pgvector==0.2.4
+alembic==1.13.1
+
+# LangChain/LangGraph ecosystem
+langgraph==0.2.28
+langgraph-checkpoint-postgres==0.0.6
+langchain==0.1.20
+langchain-openai==0.0.5
+langchain-community==0.0.20
+langchain-core==0.1.52
+
+# LlamaIndex (minimal - for parsing only)
+llama-index==0.9.48
+llama-index-readers-file==0.1.4
+
+# OpenAI
+openai==1.12.0
+
+# Retrieval & NLP
+rank-bm25==0.2.2
+sentence-transformers==2.3.1
+faiss-cpu==1.7.4
+
+# spaCy for NER
+spacy==3.7.2
+
+# Graph algorithms
+networkx==3.2.1
+python-louvain==0.16
+
+# Utilities
+python-dotenv==1.0.0
+httpx==0.26.0
+aiofiles==23.2.1
+tenacity==8.2.3
+
+# Logging and Observability
+structlog==24.1.0
+opentelemetry-api==1.22.0
+opentelemetry-sdk==1.22.0
+opentelemetry-instrumentation-fastapi==0.43b0
+langsmith==0.0.87
+
+# Development
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+black==23.12.1
+ruff==0.1.9
+mypy==1.8.0
