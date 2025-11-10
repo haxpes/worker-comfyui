@@ -7,7 +7,12 @@ from typing import List, Dict, Set, Optional, Tuple
 from uuid import UUID
 from collections import defaultdict
 import networkx as nx
-from community import community_louvain
+try:
+    from community import community_louvain
+except ImportError:
+    # Fallback to networkx's greedy modularity communities if python-louvain not available
+    import networkx.algorithms.community as community_detection
+    community_louvain = None
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
@@ -132,12 +137,21 @@ class GraphBuilder:
         for source_id, target_id, weight, _ in edges:
             G.add_edge(str(source_id), str(target_id), weight=weight)
 
-        # Detect communities using Louvain algorithm
-        communities_dict = community_louvain.best_partition(
-            G,
-            weight='weight',
-            resolution=community_resolution
-        )
+        # Detect communities using Louvain algorithm (or fallback to greedy modularity)
+        if community_louvain:
+            communities_dict = community_louvain.best_partition(
+                G,
+                weight='weight',
+                resolution=community_resolution
+            )
+        else:
+            # Fallback to networkx greedy modularity communities
+            logger.warning("python-louvain not available, using networkx greedy modularity instead")
+            communities = community_detection.greedy_modularity_communities(G, weight='weight')
+            communities_dict = {}
+            for comm_id, community in enumerate(communities):
+                for node_id in community:
+                    communities_dict[node_id] = comm_id
 
         # Group entities by community
         community_groups = defaultdict(list)
