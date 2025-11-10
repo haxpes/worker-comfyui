@@ -348,13 +348,209 @@ class ValidatorScore(Base):
 
 
 # ============================================================================
-# Phase 3+ Models (will be added later)
+# Phase 3 Models - GraphRAG
 # ============================================================================
 
-# Phase 3: GraphRAG
-# - Entity
-# - EntityOccurrence
-# - Relationship
-# - Community
-# - CommunityMember
-# - ExperienceKnowledge
+class Entity(Base):
+    """Named entities extracted from chunks."""
+    __tablename__ = "entities"
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    corpus_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("corpora.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    entity_type: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    embedding: Mapped[Optional[List[float]]] = mapped_column(Vector(1536))
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)
+    metadata: Mapped[dict] = mapped_column(
+        JSONB,
+        server_default=text("'{}'::jsonb")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=text("NOW()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=text("NOW()")
+    )
+
+    # Relationships
+    corpus: Mapped["Corpus"] = relationship("Corpus")
+    occurrences: Mapped[List["EntityOccurrence"]] = relationship(
+        "EntityOccurrence",
+        back_populates="entity"
+    )
+
+    def __repr__(self) -> str:
+        return f"<Entity(id={self.id}, name='{self.name}', type='{self.entity_type}')>"
+
+
+class EntityOccurrence(Base):
+    """Track where entities appear in chunks."""
+    __tablename__ = "entity_occurrences"
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    entity_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("entities.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    chunk_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("chunks.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    position: Mapped[Optional[int]] = mapped_column(Integer)
+    context: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=text("NOW()")
+    )
+
+    # Relationships
+    entity: Mapped["Entity"] = relationship("Entity", back_populates="occurrences")
+    chunk: Mapped["Chunk"] = relationship("Chunk")
+
+    def __repr__(self) -> str:
+        return f"<EntityOccurrence(entity_id={self.entity_id}, chunk_id={self.chunk_id})>"
+
+
+class Relationship(Base):
+    """Edges between entities in the knowledge graph."""
+    __tablename__ = "relationships"
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    corpus_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("corpora.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    source_entity_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("entities.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    target_entity_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("entities.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    relationship_type: Mapped[str] = mapped_column(Text, nullable=False)
+    weight: Mapped[float] = mapped_column(Float, default=1.0)
+    evidence_chunk_ids: Mapped[Optional[List[UUID]]] = mapped_column(JSONB)
+    metadata: Mapped[dict] = mapped_column(
+        JSONB,
+        server_default=text("'{}'::jsonb")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=text("NOW()")
+    )
+
+    # Relationships
+    corpus: Mapped["Corpus"] = relationship("Corpus")
+    source_entity: Mapped["Entity"] = relationship(
+        "Entity",
+        foreign_keys=[source_entity_id]
+    )
+    target_entity: Mapped["Entity"] = relationship(
+        "Entity",
+        foreign_keys=[target_entity_id]
+    )
+
+    def __repr__(self) -> str:
+        return f"<Relationship(type='{self.relationship_type}', weight={self.weight})>"
+
+
+class Community(Base):
+    """Detected entity clusters (topic communities)."""
+    __tablename__ = "communities"
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    corpus_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("corpora.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    name: Mapped[Optional[str]] = mapped_column(Text)
+    summary: Mapped[Optional[str]] = mapped_column(Text)
+    embedding: Mapped[Optional[List[float]]] = mapped_column(Vector(1536))
+    level: Mapped[int] = mapped_column(Integer, default=0)
+    size: Mapped[Optional[int]] = mapped_column(Integer)
+    coherence_score: Mapped[Optional[float]] = mapped_column(Float)
+    metadata: Mapped[dict] = mapped_column(
+        JSONB,
+        server_default=text("'{}'::jsonb")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=text("NOW()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=text("NOW()")
+    )
+
+    # Relationships
+    corpus: Mapped["Corpus"] = relationship("Corpus")
+    members: Mapped[List["CommunityMember"]] = relationship(
+        "CommunityMember",
+        back_populates="community"
+    )
+
+    def __repr__(self) -> str:
+        return f"<Community(id={self.id}, name='{self.name}', size={self.size})>"
+
+
+class CommunityMember(Base):
+    """Entities belonging to communities."""
+    __tablename__ = "community_members"
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()")
+    )
+    community_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("communities.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    entity_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("entities.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    membership_score: Mapped[float] = mapped_column(Float, default=1.0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=text("NOW()")
+    )
+
+    # Relationships
+    community: Mapped["Community"] = relationship("Community", back_populates="members")
+    entity: Mapped["Entity"] = relationship("Entity")
+
+    def __repr__(self) -> str:
+        return f"<CommunityMember(community_id={self.community_id}, entity_id={self.entity_id})>"

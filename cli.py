@@ -389,5 +389,190 @@ def build_raptor(
     asyncio.run(run_build())
 
 
+@app.command()
+def extract_entities(
+    corpus_name: str = typer.Argument(..., help="Corpus name to extract entities from"),
+    force: bool = typer.Option(False, "--force", "-f", help="Force rebuild (delete existing entities)"),
+    enhance: bool = typer.Option(True, "--enhance/--no-enhance", help="Use LLM to enhance entity descriptions"),
+):
+    """
+    Extract named entities from corpus chunks using spaCy and LLM.
+
+    Identifies persons, organizations, standards, regulations, and technical concepts.
+    Required for graph-based retrieval.
+    """
+    console.print(f"\n[bold blue]Entity Extractor[/bold blue]\n")
+
+    async def run_extract():
+        try:
+            from app.db.connection import get_db_session
+            from app.db.models import Corpus
+            from app.ingestion.entity_extractor import create_entity_extractor
+            from sqlalchemy import select
+
+            # Initialize database
+            with console.status("[bold green]Initializing database...[/bold green]"):
+                await init_db()
+                db_ok = await check_db_connection()
+
+                if not db_ok:
+                    console.print("[red]Database connection failed![/red]")
+                    raise typer.Exit(1)
+
+                console.print("[green]✓[/green] Database connected\n")
+
+            # Get corpus
+            async with get_db_session() as session:
+                result = await session.execute(
+                    select(Corpus).where(Corpus.name == corpus_name)
+                )
+                corpus = result.scalar_one_or_none()
+
+                if not corpus:
+                    console.print(f"[red]Corpus not found: {corpus_name}[/red]")
+                    console.print("\nUse 'cli.py list-corpora' to see available corpora.")
+                    raise typer.Exit(1)
+
+                corpus_id = str(corpus.id)
+                console.print(f"[bold]Corpus:[/bold] {corpus_name}")
+                console.print(f"[bold]Corpus ID:[/bold] {corpus_id}")
+                console.print(f"[bold]Force rebuild:[/bold] {force}")
+                console.print(f"[bold]LLM enhancement:[/bold] {enhance}\n")
+
+            # Extract entities
+            console.print("[bold cyan]Extracting entities...[/bold cyan]\n")
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console
+            ) as progress:
+                task = progress.add_task("Extracting entities...", total=None)
+
+                extractor = create_entity_extractor()
+                stats = await extractor.extract_from_corpus(
+                    corpus_id=corpus_id,
+                    force_rebuild=force,
+                    enhance_with_llm=enhance
+                )
+
+                progress.stop()
+
+            # Display results
+            console.print("\n[bold green]Entity extraction completed![/bold green]\n")
+
+            table = Table(title="Entity Extraction Statistics")
+            table.add_column("Metric", style="cyan")
+            table.add_column("Value", style="green")
+
+            table.add_row("Entities Extracted", str(stats["entities"]))
+            table.add_row("Entity Occurrences", str(stats["occurrences"]))
+            table.add_row("Chunks Processed", str(stats["chunks_processed"]))
+
+            console.print(table)
+            console.print("\n[green]✓[/green] Entities ready for graph construction!")
+            console.print()
+
+        except Exception as e:
+            console.print(f"\n[red]Error: {e}[/red]")
+            logger.error("Entity extraction failed", error=str(e))
+            raise typer.Exit(1)
+
+    asyncio.run(run_extract())
+
+
+@app.command()
+def build_graph(
+    corpus_name: str = typer.Argument(..., help="Corpus name to build graph for"),
+    force: bool = typer.Option(False, "--force", "-f", help="Force rebuild (delete existing graph)"),
+    resolution: float = typer.Option(1.0, "--resolution", "-r", help="Community detection resolution (0.5-2.0)"),
+):
+    """
+    Build knowledge graph from extracted entities.
+
+    Creates co-mention edges, detects communities, generates community summaries.
+    Required for GraphOnDemand agent.
+    """
+    console.print(f"\n[bold blue]Knowledge Graph Builder[/bold blue]\n")
+
+    async def run_build():
+        try:
+            from app.db.connection import get_db_session
+            from app.db.models import Corpus
+            from app.ingestion.graph_builder import create_graph_builder
+            from sqlalchemy import select
+
+            # Initialize database
+            with console.status("[bold green]Initializing database...[/bold green]"):
+                await init_db()
+                db_ok = await check_db_connection()
+
+                if not db_ok:
+                    console.print("[red]Database connection failed![/red]")
+                    raise typer.Exit(1)
+
+                console.print("[green]✓[/green] Database connected\n")
+
+            # Get corpus
+            async with get_db_session() as session:
+                result = await session.execute(
+                    select(Corpus).where(Corpus.name == corpus_name)
+                )
+                corpus = result.scalar_one_or_none()
+
+                if not corpus:
+                    console.print(f"[red]Corpus not found: {corpus_name}[/red]")
+                    console.print("\nUse 'cli.py list-corpora' to see available corpora.")
+                    raise typer.Exit(1)
+
+                corpus_id = str(corpus.id)
+                console.print(f"[bold]Corpus:[/bold] {corpus_name}")
+                console.print(f"[bold]Corpus ID:[/bold] {corpus_id}")
+                console.print(f"[bold]Force rebuild:[/bold] {force}")
+                console.print(f"[bold]Resolution:[/bold] {resolution}\n")
+
+            # Build graph
+            console.print("[bold cyan]Building knowledge graph...[/bold cyan]\n")
+            console.print("This may take several minutes for large corpora.\n")
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console
+            ) as progress:
+                task = progress.add_task("Building graph...", total=None)
+
+                builder = create_graph_builder()
+                stats = await builder.build_graph(
+                    corpus_id=corpus_id,
+                    force_rebuild=force,
+                    community_resolution=resolution
+                )
+
+                progress.stop()
+
+            # Display results
+            console.print("\n[bold green]Knowledge graph completed![/bold green]\n")
+
+            table = Table(title="Graph Statistics")
+            table.add_column("Metric", style="cyan")
+            table.add_column("Value", style="green")
+
+            table.add_row("Nodes (Entities)", str(stats["nodes"]))
+            table.add_row("Edges (Relationships)", str(stats["edges"]))
+            table.add_row("Communities", str(stats["communities"]))
+
+            console.print(table)
+            console.print("\n[green]✓[/green] GraphOnDemand agent is now available for this corpus!")
+            console.print()
+
+        except Exception as e:
+            console.print(f"\n[red]Error: {e}[/red]")
+            logger.error("Graph build failed", error=str(e))
+            raise typer.Exit(1)
+
+    asyncio.run(run_build())
+
+
 if __name__ == "__main__":
     app()

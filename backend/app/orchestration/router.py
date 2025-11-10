@@ -43,6 +43,16 @@ Available Agents:
    - Pros: Highest citation integrity, minimal hallucination risk
    - Cons: Can be terse, requires high-quality sources
 
+5. **graph_on_demand**: Relationship-aware retrieval using knowledge graph
+   - Best for: Relationship queries, "how are X and Y related", entity-focused questions
+   - Pros: Excellent for understanding connections, community insights
+   - Cons: Requires entity extraction and graph building
+
+6. **self_rag**: Self-reflective iterative retrieval
+   - Best for: Very complex queries requiring comprehensive coverage, research questions
+   - Pros: Most thorough, detects and fills gaps, highest completeness
+   - Cons: Slowest, most expensive
+
 Task: Select the SINGLE best agent for this query.
 
 Consider:
@@ -89,7 +99,9 @@ class Router:
             "lean_hybrid",
             "raptor",
             "plan_then_read",
-            "evidence_first"
+            "evidence_first",
+            "graph_on_demand",
+            "self_rag"
         ]
 
         logger.info("Router initialized", available_agents=self.available_agents)

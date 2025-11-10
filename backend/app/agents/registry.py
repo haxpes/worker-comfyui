@@ -43,8 +43,10 @@ class AgentRegistry:
         from app.agents.core.raptor_agent import create_raptor_agent
         from app.agents.core.plan_then_read import create_plan_then_read_agent
         from app.agents.core.evidence_first import create_evidence_first_agent
+        from app.agents.core.graph_on_demand import create_graph_on_demand_agent
+        from app.agents.core.self_rag import create_self_rag_agent
 
-        # Core agents
+        # Phase 1-2 Core agents
         self.register(
             AgentMetadata(
                 name="lean_hybrid",
@@ -94,6 +96,33 @@ class AgentRegistry:
                 requires_corpus=False,
                 supports_streaming=True,
                 initialization_fn=create_evidence_first_agent
+            )
+        )
+
+        # Phase 3 Core agents
+        self.register(
+            AgentMetadata(
+                name="graph_on_demand",
+                display_name="GraphOnDemand Agent",
+                description="Relationship-aware retrieval using knowledge graph with entity and community search",
+                category="core",
+                capabilities=["relationship_qa", "graph_retrieval", "entity_search", "community_analysis"],
+                requires_corpus=False,
+                supports_streaming=True,
+                initialization_fn=create_graph_on_demand_agent
+            )
+        )
+
+        self.register(
+            AgentMetadata(
+                name="self_rag",
+                display_name="SelfRAG Agent",
+                description="Self-reflective agent with iterative retrieval and gap detection for comprehensive answers",
+                category="core",
+                capabilities=["iterative_retrieval", "self_reflection", "gap_detection", "comprehensive_qa"],
+                requires_corpus=False,
+                supports_streaming=True,
+                initialization_fn=create_self_rag_agent
             )
         )
 
