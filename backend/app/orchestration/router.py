@@ -53,6 +53,26 @@ Available Agents:
    - Pros: Most thorough, detects and fills gaps, highest completeness
    - Cons: Slowest, most expensive
 
+7. **distill_first**: Pre-distilled knowledge with corpus fallback
+   - Best for: Repeated queries, similar questions asked before
+   - Pros: Fastest for repeated queries, learns from conversation history
+   - Cons: May be stale, requires conversation history
+
+8. **hrm**: Hierarchical reasoning model (strategy + execution)
+   - Best for: Complex decisions, multi-level analysis, strategic planning
+   - Pros: Structured reasoning, decision matrix output
+   - Cons: Complex, slower than simple agents
+
+9. **cot**: Chain-of-thought reasoning
+   - Best for: Queries requiring transparent logic, step-by-step explanations
+   - Pros: Shows reasoning process, tracks assumptions
+   - Cons: Verbose, may over-explain
+
+10. **react**: Reasoning + Acting with tools
+   - Best for: Dynamic problems requiring tool usage, calculations, multi-step actions
+   - Pros: Can use tools, flexible problem solving
+   - Cons: May require multiple iterations
+
 Task: Select the SINGLE best agent for this query.
 
 Consider:
@@ -101,7 +121,11 @@ class Router:
             "plan_then_read",
             "evidence_first",
             "graph_on_demand",
-            "self_rag"
+            "self_rag",
+            "distill_first",
+            "hrm",
+            "cot",
+            "react"
         ]
 
         logger.info("Router initialized", available_agents=self.available_agents)

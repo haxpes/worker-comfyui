@@ -45,6 +45,10 @@ class AgentRegistry:
         from app.agents.core.evidence_first import create_evidence_first_agent
         from app.agents.core.graph_on_demand import create_graph_on_demand_agent
         from app.agents.core.self_rag import create_self_rag_agent
+        from app.agents.core.distill_first import create_distill_first_agent
+        from app.agents.core.hrm import create_hrm_agent
+        from app.agents.core.cot import create_cot_agent
+        from app.agents.core.react import create_react_agent
 
         # Phase 1-2 Core agents
         self.register(
@@ -123,6 +127,59 @@ class AgentRegistry:
                 requires_corpus=False,
                 supports_streaming=True,
                 initialization_fn=create_self_rag_agent
+            )
+        )
+
+        # Phase 4 Core agents
+        self.register(
+            AgentMetadata(
+                name="distill_first",
+                display_name="DistillFirst Agent",
+                description="Fast agent using pre-distilled knowledge with corpus fallback for repeated queries",
+                category="core",
+                capabilities=["fast_qa", "knowledge_reuse", "conversation_memory", "conflict_resolution"],
+                requires_corpus=False,
+                supports_streaming=True,
+                initialization_fn=create_distill_first_agent
+            )
+        )
+
+        self.register(
+            AgentMetadata(
+                name="hrm",
+                display_name="HRM Agent",
+                description="Hierarchical reasoning model with strategy/execution alternation for complex decisions",
+                category="core",
+                capabilities=["hierarchical_reasoning", "strategic_planning", "multi_level_analysis", "decision_matrix"],
+                requires_corpus=False,
+                supports_streaming=True,
+                initialization_fn=create_hrm_agent
+            )
+        )
+
+        self.register(
+            AgentMetadata(
+                name="cot",
+                display_name="Chain-of-Thought Agent",
+                description="Step-by-step reasoning with evidence linking for transparent decision making",
+                category="core",
+                capabilities=["step_by_step_reasoning", "transparent_logic", "evidence_linking", "assumption_tracking"],
+                requires_corpus=False,
+                supports_streaming=True,
+                initialization_fn=create_cot_agent
+            )
+        )
+
+        self.register(
+            AgentMetadata(
+                name="react",
+                display_name="ReAct Agent",
+                description="Reasoning + Acting agent with tool usage for dynamic problem solving",
+                category="core",
+                capabilities=["tool_usage", "reasoning_acting_loop", "dynamic_problem_solving", "action_planning"],
+                requires_corpus=False,
+                supports_streaming=True,
+                initialization_fn=create_react_agent
             )
         )
 
