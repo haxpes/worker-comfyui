@@ -73,6 +73,11 @@ Available Agents:
    - Pros: Can use tools, flexible problem solving
    - Cons: May require multiple iterations
 
+11. **qfsd**: Query-Focused Summary Document with 15-stage pipeline
+   - Best for: Token-efficient comprehensive retrieval, queries needing wide coverage with deduplication
+   - Pros: Optimal token usage, NLI filtering, coverage tracking, submodular selection
+   - Cons: Complex pipeline, requires transformers/NLI models
+
 Task: Select the SINGLE best agent for this query.
 
 Consider:

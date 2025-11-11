@@ -49,6 +49,7 @@ class AgentRegistry:
         from app.agents.core.hrm import create_hrm_agent
         from app.agents.core.cot import create_cot_agent
         from app.agents.core.react import create_react_agent
+        from app.agents.core.qfsd_agent import create_qfsd_agent
 
         # Phase 1-2 Core agents
         self.register(
@@ -180,6 +181,20 @@ class AgentRegistry:
                 requires_corpus=False,
                 supports_streaming=True,
                 initialization_fn=create_react_agent
+            )
+        )
+
+        # QFSD Agent (Phase 5)
+        self.register(
+            AgentMetadata(
+                name="qfsd",
+                display_name="QFSD Agent",
+                description="Query-Focused Summary Document generation with 15-stage pipeline: wide search, NLI filtering, FAISS deduplication, submodular selection",
+                category="core",
+                capabilities=["comprehensive_qa", "token_efficient", "coverage_tracking", "nli_filtering", "submodular_optimization"],
+                requires_corpus=False,
+                supports_streaming=True,
+                initialization_fn=create_qfsd_agent
             )
         )
 
